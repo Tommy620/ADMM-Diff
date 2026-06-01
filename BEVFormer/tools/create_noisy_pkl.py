@@ -170,7 +170,9 @@ def wrap_to_pi(angle: np.ndarray) -> np.ndarray:
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 
-def class_mask(gt_names: Optional[Iterable[str]], classes: Optional[set]) -> Optional[np.ndarray]:
+def class_mask(
+    gt_names: Optional[Iterable[str]], classes: Optional[set]
+) -> Optional[np.ndarray]:
     if classes is None:
         return None
     if gt_names is None:
@@ -199,7 +201,9 @@ def corrupt_boxes(
         raise ValueError(f"Expected gt_boxes with shape [N, >=7], got {boxes.shape}.")
 
     selected = rng.random(boxes.shape[0]) < args.object_prob
-    selected_by_class = class_mask(gt_names, set(args.classes) if args.classes else None)
+    selected_by_class = class_mask(
+        gt_names, set(args.classes) if args.classes else None
+    )
     if selected_by_class is not None:
         selected &= selected_by_class
 
@@ -220,7 +224,9 @@ def corrupt_boxes(
             scale = 1.0 + rng.normal(0.0, args.size_std, size=(selected.sum(), 3))
             boxes[selected, 3:6] *= scale
         else:
-            boxes[selected, 3:6] += rng.normal(0.0, args.size_std, size=(selected.sum(), 3))
+            boxes[selected, 3:6] += rng.normal(
+                0.0, args.size_std, size=(selected.sum(), 3)
+            )
         boxes[:, 3:6] = np.maximum(boxes[:, 3:6], args.min_size)
         stats["size_noisy_boxes"] = int(selected.sum())
 
@@ -235,7 +241,9 @@ def corrupt_boxes(
     if args.yaw_std_deg > 0 or args.yaw_offset_deg != 0:
         yaw_noise = np.zeros(selected.sum(), dtype=boxes.dtype)
         if args.yaw_std_deg > 0:
-            yaw_noise += rng.normal(0.0, np.deg2rad(args.yaw_std_deg), size=selected.sum())
+            yaw_noise += rng.normal(
+                0.0, np.deg2rad(args.yaw_std_deg), size=selected.sum()
+            )
         if args.yaw_offset_deg != 0:
             yaw_noise += np.deg2rad(args.yaw_offset_deg)
         boxes[selected, YAW_IDX] = wrap_to_pi(boxes[selected, YAW_IDX] + yaw_noise)
@@ -305,7 +313,9 @@ def main() -> None:
     input_protocol = detect_pickle_protocol(args.input)
     output_protocol = args.pickle_protocol
     if output_protocol is None:
-        output_protocol = input_protocol if input_protocol is not None else pickle.HIGHEST_PROTOCOL
+        output_protocol = (
+            input_protocol if input_protocol is not None else pickle.HIGHEST_PROTOCOL
+        )
 
     dump_pkl(noisy_data, args.output, output_protocol)
     print(f"Wrote noisy pkl to: {args.output}")

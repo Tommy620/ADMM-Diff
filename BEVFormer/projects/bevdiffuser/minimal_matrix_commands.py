@@ -5,7 +5,9 @@ from pathlib import Path
 
 
 ADMM_SCRIPT_DIR = Path("/root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser")
-BASELINE_SCRIPT_DIR = Path("/root/autodl-tmp/BEVDiffuser-main/BEVFormer/projects/bevdiffuser")
+BASELINE_SCRIPT_DIR = Path(
+    "/root/autodl-tmp/BEVDiffuser-main/BEVFormer/projects/bevdiffuser"
+)
 PKL_ROOT = Path("/root/autodl-tmp/nuscenes")
 
 EXPERIMENTS = {

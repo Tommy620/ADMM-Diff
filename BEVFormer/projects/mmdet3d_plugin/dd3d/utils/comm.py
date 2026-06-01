@@ -22,6 +22,7 @@ def broadcast_from_master(fn):
     @broadcast_from_master
     def foo(a, b): ...
     """
+
     @wraps(fn)
     def wrapper(*args, **kwargs):  # pylint: disable=unused-argument
         global _NESTED_BROADCAST_FROM_MASTER
@@ -36,10 +37,14 @@ def broadcast_from_master(fn):
 
         if d2_comm.is_main_process():
             _NESTED_BROADCAST_FROM_MASTER = True
-            ret = [fn(*args, **kwargs), ]
+            ret = [
+                fn(*args, **kwargs),
+            ]
             _NESTED_BROADCAST_FROM_MASTER = False
         else:
-            ret = [None, ]
+            ret = [
+                None,
+            ]
         if dist.is_initialized():
             dist.broadcast_object_list(ret)
         ret = ret[0]
@@ -57,6 +62,7 @@ def master_only(fn):
     @master_only
     def foo(a, b): ...
     """
+
     @wraps(fn)
     def wrapped_fn(*args, **kwargs):
         if d2_comm.is_main_process():

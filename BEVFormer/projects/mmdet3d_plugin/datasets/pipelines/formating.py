@@ -13,6 +13,7 @@ from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import to_tensor
 from mmdet3d.datasets.pipelines import DefaultFormatBundle3D
 
+
 @PIPELINES.register_module()
 class CustomDefaultFormatBundle3D(DefaultFormatBundle3D):
     """Default formatting bundle.
@@ -37,7 +38,6 @@ class CustomDefaultFormatBundle3D(DefaultFormatBundle3D):
         """
         # Format 3D data
         results = super(CustomDefaultFormatBundle3D, self).__call__(results)
-        results['gt_map_masks'] = DC(
-            to_tensor(results['gt_map_masks']), stack=True)
+        results["gt_map_masks"] = DC(to_tensor(results["gt_map_masks"]), stack=True)
 
         return results

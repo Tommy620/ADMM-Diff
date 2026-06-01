@@ -7,7 +7,10 @@ class Pose:
     """SE(3) rigid transform class that allows compounding of 6-DOF poses
     and provides common transformations that are commonly seen in geometric problems.
     """
-    def __init__(self, wxyz=np.float32([1., 0., 0., 0.]), tvec=np.float32([0., 0., 0.])):
+
+    def __init__(
+        self, wxyz=np.float32([1.0, 0.0, 0.0, 0.0]), tvec=np.float32([0.0, 0.0, 0.0])
+    ):
         """Initialize a Pose with Quaternion and 3D Position
 
         Parameters
@@ -28,9 +31,9 @@ class Pose:
         self.tvec = tvec
 
     def __repr__(self):
-        formatter = {'float_kind': lambda x: '%.2f' % x}
+        formatter = {"float_kind": lambda x: "%.2f" % x}
         tvec_str = np.array2string(self.tvec, formatter=formatter)
-        return 'wxyz: {}, tvec: ({})'.format(self.quat, tvec_str)
+        return "wxyz: {}, tvec: ({})".format(self.quat, tvec_str)
 
     def copy(self):
         """Return a copy of this pose object.
@@ -64,14 +67,14 @@ class Pose:
             q = self.quat * other.quat
             return self.__class__(q, t)
         elif isinstance(other, np.ndarray):
-            assert other.shape[-1] == 3, 'Point cloud is not 3-dimensional'
+            assert other.shape[-1] == 3, "Point cloud is not 3-dimensional"
             X = np.hstack([other, np.ones((len(other), 1))]).T
             return (np.dot(self.matrix, X).T)[:, :3]
         else:
             return NotImplemented
 
     def __rmul__(self, other):
-        raise NotImplementedError('Right multiply not implemented yet!')
+        raise NotImplementedError("Right multiply not implemented yet!")
 
     def inverse(self):
         """Returns a new Pose that corresponds to the
@@ -145,7 +148,10 @@ class Pose:
         -------
         Pose
         """
-        return cls(wxyz=Quaternion(matrix=transformation_matrix[:3, :3]), tvec=np.float32(transformation_matrix[:3, 3]))
+        return cls(
+            wxyz=Quaternion(matrix=transformation_matrix[:3, :3]),
+            tvec=np.float32(transformation_matrix[:3, 3]),
+        )
 
     @classmethod
     def from_rotation_translation(cls, rotation_matrix, tvec):

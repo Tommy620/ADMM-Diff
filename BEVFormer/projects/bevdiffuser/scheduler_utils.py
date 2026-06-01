@@ -13,20 +13,21 @@ from diffusers import DDIMScheduler
 from diffusers.schedulers.scheduling_ddim import DDIMSchedulerOutput
 from diffusers.utils.torch_utils import randn_tensor
 
+
 class DDIMGuidedScheduler(DDIMScheduler):
     # Implementation of classfier guided DDIM scheduler
-    
+
     def step(
         self,
-        model_output: torch.Tensor, #根据当前t模型提议的x_0
-        timestep: int, #当前t
-        sample: torch.Tensor, # x_t,即和当前t匹配的带噪图
-        eta: float = 0.0, #0
-        use_clipped_model_output: bool = False, #F
-        generator=None, #None
-        variance_noise: Optional[torch.Tensor] = None, #None
-        return_dict: bool = True, #F
-        classifier_gradient=None #None
+        model_output: torch.Tensor,  # 根据当前t模型提议的x_0
+        timestep: int,  # 当前t
+        sample: torch.Tensor,  # x_t,即和当前t匹配的带噪图
+        eta: float = 0.0,  # 0
+        use_clipped_model_output: bool = False,  # F
+        generator=None,  # None
+        variance_noise: Optional[torch.Tensor] = None,  # None
+        return_dict: bool = True,  # F
+        classifier_gradient=None,  # None
     ) -> Union[DDIMSchedulerOutput, Tuple]:
         """
         Predict the sample from the previous timestep by reversing the SDE. This function propagates the diffusion
@@ -78,38 +79,56 @@ class DDIMGuidedScheduler(DDIMScheduler):
         # - pred_prev_sample -> "x_t-1"
 
         # 1. get previous step value (=t-1)
-        prev_timestep = timestep - self.config.num_train_timesteps // self.num_inference_steps
+        prev_timestep = (
+            timestep - self.config.num_train_timesteps // self.num_inference_steps
+        )
 
         # 2. compute alphas, betas
         alpha_prod_t = self.alphas_cumprod[timestep]
-        alpha_prod_t_prev = self.alphas_cumprod[prev_timestep] if prev_timestep >= 0 else self.final_alpha_cumprod
+        alpha_prod_t_prev = (
+            self.alphas_cumprod[prev_timestep]
+            if prev_timestep >= 0
+            else self.final_alpha_cumprod
+        )
 
         beta_prod_t = 1 - alpha_prod_t
 
         # 3. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
         if self.config.prediction_type == "epsilon":
-            pred_original_sample = (sample - beta_prod_t ** (0.5) * model_output) / alpha_prod_t ** (0.5)
+            pred_original_sample = (
+                sample - beta_prod_t ** (0.5) * model_output
+            ) / alpha_prod_t ** (0.5)
             pred_epsilon = model_output
         elif self.config.prediction_type == "sample":
-            pred_original_sample = model_output #模型根据当前的x_t提议的x_0
-            pred_epsilon = (sample - alpha_prod_t ** (0.5) * pred_original_sample) / beta_prod_t ** (0.5) #得到噪声
+            pred_original_sample = model_output  # 模型根据当前的x_t提议的x_0
+            pred_epsilon = (
+                sample - alpha_prod_t ** (0.5) * pred_original_sample
+            ) / beta_prod_t ** (
+                0.5
+            )  # 得到噪声
         elif self.config.prediction_type == "v_prediction":
-            pred_original_sample = (alpha_prod_t**0.5) * sample - (beta_prod_t**0.5) * model_output
-            pred_epsilon = (alpha_prod_t**0.5) * model_output + (beta_prod_t**0.5) * sample
+            pred_original_sample = (alpha_prod_t**0.5) * sample - (
+                beta_prod_t**0.5
+            ) * model_output
+            pred_epsilon = (alpha_prod_t**0.5) * model_output + (
+                beta_prod_t**0.5
+            ) * sample
         else:
             raise ValueError(
                 f"prediction_type given as {self.config.prediction_type} must be one of `epsilon`, `sample` or `v_prediction`"
             )
-    
-        if classifier_gradient is not None: #不执行
+
+        if classifier_gradient is not None:  # 不执行
             pred_epsilon = pred_epsilon - beta_prod_t ** (0.5) * classifier_gradient
-            pred_original_sample = (sample - beta_prod_t ** (0.5) * pred_epsilon) / alpha_prod_t ** (0.5)
+            pred_original_sample = (
+                sample - beta_prod_t ** (0.5) * pred_epsilon
+            ) / alpha_prod_t ** (0.5)
 
         # 4. Clip or threshold "predicted x_0"
-        if self.config.thresholding: #不执行
+        if self.config.thresholding:  # 不执行
             pred_original_sample = self._threshold_sample(pred_original_sample)
-        elif self.config.clip_sample: #不执行
+        elif self.config.clip_sample:  # 不执行
             pred_original_sample = pred_original_sample.clamp(
                 -self.config.clip_sample_range, self.config.clip_sample_range
             )
@@ -117,17 +136,23 @@ class DDIMGuidedScheduler(DDIMScheduler):
         # 5. compute variance: "sigma_t(η)" -> see formula (16)
         # σ_t = sqrt((1 − α_t−1)/(1 − α_t)) * sqrt(1 − α_t/α_t−1)
         variance = self._get_variance(timestep, prev_timestep)
-        std_dev_t = eta * variance ** (0.5) #0
+        std_dev_t = eta * variance ** (0.5)  # 0
 
-        if use_clipped_model_output: #不执行
+        if use_clipped_model_output:  # 不执行
             # the pred_epsilon is always re-derived from the clipped x_0 in Glide
-            pred_epsilon = (sample - alpha_prod_t ** (0.5) * pred_original_sample) / beta_prod_t ** (0.5)
+            pred_epsilon = (
+                sample - alpha_prod_t ** (0.5) * pred_original_sample
+            ) / beta_prod_t ** (0.5)
 
         # 6. compute "direction pointing to x_t" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
-        pred_sample_direction = (1 - alpha_prod_t_prev - std_dev_t**2) ** (0.5) * pred_epsilon
+        pred_sample_direction = (1 - alpha_prod_t_prev - std_dev_t**2) ** (
+            0.5
+        ) * pred_epsilon
 
         # 7. compute x_t without "random noise" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
-        prev_sample = alpha_prod_t_prev ** (0.5) * pred_original_sample + pred_sample_direction
+        prev_sample = (
+            alpha_prod_t_prev ** (0.5) * pred_original_sample + pred_sample_direction
+        )
 
         if eta > 0:
             if variance_noise is not None and generator is not None:
@@ -138,7 +163,10 @@ class DDIMGuidedScheduler(DDIMScheduler):
 
             if variance_noise is None:
                 variance_noise = randn_tensor(
-                    model_output.shape, generator=generator, device=model_output.device, dtype=model_output.dtype
+                    model_output.shape,
+                    generator=generator,
+                    device=model_output.device,
+                    dtype=model_output.dtype,
                 )
             variance = std_dev_t * variance_noise
 
@@ -147,4 +175,6 @@ class DDIMGuidedScheduler(DDIMScheduler):
         if not return_dict:
             return (prev_sample,)
 
-        return DDIMSchedulerOutput(prev_sample=prev_sample, pred_original_sample=pred_original_sample)
+        return DDIMSchedulerOutput(
+            prev_sample=prev_sample, pred_original_sample=pred_original_sample
+        )

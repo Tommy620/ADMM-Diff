@@ -27,6 +27,7 @@ def _inverse_softplus(value):
     value = torch.as_tensor(value, dtype=torch.float32)
     return torch.log(torch.expm1(value))
 
+
 # 相较ADMM-Diff-ori，共 7 处实质性修改：
 
 # 输出改为残差连接（最关键）
@@ -90,7 +91,6 @@ def _inverse_softplus(value):
 #             ))  # out_channels=256
 
 
-
 #         self.model_channels = in_channels
 #         time_embed_dim = 1024
 #         self.time_embed = nn.Sequential(
@@ -113,7 +113,6 @@ def _inverse_softplus(value):
 #                 use_3d_bbox=True)
 
 #         self.rho = nn.Parameter(torch.tensor([0.1]), requires_grad=True) #约束强度，作用于s.t. 归零式之前
-
 
 
 #         self.R_struct = RStructTransform(
@@ -632,14 +631,13 @@ def _inverse_softplus(value):
 #      独立可学，再除以 rho 只是冗余耦合）。
 #   其余（layout_encoder、time_embed、Out_Layer 的 zero-init、save/load、计时与 history、
 #   forward 接口）全部与 V1 保持一致。
-class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残缺图
+class ADMMDenoiser(nn.Module):  # 总共有三种图：精细图，稀疏图和残缺图
     def __init__(
         self,
         in_channels: int = 256,
         out_channels: int = 256,
         kernel_size: int = 5,
-        num_admm_iters: int = 4
-
+        num_admm_iters: int = 4,
     ):
         """
         Args:
@@ -659,39 +657,47 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
             SiLU(),
             linear(time_embed_dim, time_embed_dim),
         )
-        self.layout_encoder = LayoutTransformerEncoder(used_condition_types=['obj_class', 'obj_bbox', 'is_valid_obj'],
-                layout_length=300,
-                num_classes_for_layout_object=12,
-                mask_size_for_layout_object=0,
-                hidden_dim=256,
-                output_dim=1024, # model_channels x 4
-                num_layers=6,
-                num_heads=8,
-                use_final_ln=True,
-                use_positional_embedding=False,
-                resolution_to_attention=[12, 25, 50], #[ 8, 16, 32 ],
-                use_key_padding_mask=False,
-                use_3d_bbox=True)
+        self.layout_encoder = LayoutTransformerEncoder(
+            used_condition_types=["obj_class", "obj_bbox", "is_valid_obj"],
+            layout_length=300,
+            num_classes_for_layout_object=12,
+            mask_size_for_layout_object=0,
+            hidden_dim=256,
+            output_dim=1024,  # model_channels x 4
+            num_layers=6,
+            num_heads=8,
+            use_final_ln=True,
+            use_positional_embedding=False,
+            resolution_to_attention=[12, 25, 50],  # [ 8, 16, 32 ],
+            use_key_padding_mask=False,
+            use_3d_bbox=True,
+        )
 
         # 改动3：按迭代各配一组 rho/gamma（可学习标量，softplus 保证为正）。
         # 形状均为 (num_admm_iters,)，第 i 次迭代取 rho[i] / gamma[i]。
         self.rho = nn.Parameter(_inverse_softplus(torch.full((num_admm_iters,), 0.1)))
-        self.gamma = nn.Parameter(_inverse_softplus(torch.full((num_admm_iters,), 1e-4)))
+        self.gamma = nn.Parameter(
+            _inverse_softplus(torch.full((num_admm_iters,), 1e-4))
+        )
 
         # 改动2：prior 网络按迭代解绑，4 次迭代各用一套独立权重（deep unrolling）。
-        self.R_struct = nn.ModuleList([
-            RStructTransform(in_channels=256, hidden_channels=512)
-            for _ in range(num_admm_iters)
-        ])
-        self.R_struct_inverse = nn.ModuleList([
-            RStructInverseTransform(in_channels=512, out_channels=256)
-            for _ in range(num_admm_iters)
-        ])
+        self.R_struct = nn.ModuleList(
+            [
+                RStructTransform(in_channels=256, hidden_channels=512)
+                for _ in range(num_admm_iters)
+            ]
+        )
+        self.R_struct_inverse = nn.ModuleList(
+            [
+                RStructInverseTransform(in_channels=512, out_channels=256)
+                for _ in range(num_admm_iters)
+            ]
+        )
 
         self.out_layer = Out_Layer()
         self.last_sparsity = 0.0
 
-        #for making first fig, after that, you can note these codes.
+        # for making first fig, after that, you can note these codes.
         self.x_history = []  # 记录内部迭代的x
         self.z_history = []  # 记录内部迭代的z
         self.reset_history()
@@ -728,8 +734,19 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
         state["num_admm_iters"] = float(self.num_admm_iters)
         return state
 
-    def forward(self, x, timesteps, sqrt_alpha_t=None, obj_class=None, obj_bbox=None, obj_mask=None, is_valid_obj=None, obj_name=None, last_scheduler_iter = False, **kwargs): #模型输入x：已经稀疏化后的图像（Fx） 所以这个模型本质上就是学会从Fx_gt到x_gt的映射，学会如何从稀疏到稠密。
-
+    def forward(
+        self,
+        x,
+        timesteps,
+        sqrt_alpha_t=None,
+        obj_class=None,
+        obj_bbox=None,
+        obj_mask=None,
+        is_valid_obj=None,
+        obj_name=None,
+        last_scheduler_iter=False,
+        **kwargs,
+    ):  # 模型输入x：已经稀疏化后的图像（Fx） 所以这个模型本质上就是学会从Fx_gt到x_gt的映射，学会如何从稀疏到稠密。
         # for making first fig, after that, you can note these codes.
         if last_scheduler_iter:
             self.reset_history()
@@ -741,13 +758,13 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
             obj_bbox=obj_bbox,
             obj_mask=obj_mask,
             is_valid_obj=is_valid_obj,
-            obj_name=obj_name
+            obj_name=obj_name,
         )
         xf_proj, xf_out = layout_outputs["xf_proj"], layout_outputs["xf_out"]
         emb_combined = emb + xf_proj.to(emb)
 
         # 计算 α_t
-        alpha_bar_t = sqrt_alpha_t ** 2  # α_t
+        alpha_bar_t = sqrt_alpha_t**2  # α_t
         rho, gamma, threshold = self._positive_regularizers()  # 均为 (K,)
 
         # ============= Table 8 计时：forward 总时间起点（条件执行）=============
@@ -790,14 +807,11 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
             Rv = self.R_struct[i](v, emb_combined, layout_outputs)
 
             # ===== soft threshold =====
-            w_sparse = torch.sign(Rv) * torch.clamp(
-                torch.abs(Rv) - threshold_i,
-                min=0
-            )
+            w_sparse = torch.sign(Rv) * torch.clamp(torch.abs(Rv) - threshold_i, min=0)
 
             # ============= Table 8: sparse ops 开关（条件执行）=============
             if self.use_sparse_ops:
-                sparse_mask = (torch.abs(w_sparse) >= 1e-6)
+                sparse_mask = torch.abs(w_sparse) >= 1e-6
                 w_sparse = (w_sparse * sparse_mask).contiguous()
             # ================================================================
 
@@ -849,8 +863,11 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
             for module in self.upsample_blocks:
                 final_output = module(final_output)
 
-        return (final_output, list(self.x_history), list(self.z_history)) if last_scheduler_iter else final_output
-
+        return (
+            (final_output, list(self.x_history), list(self.z_history))
+            if last_scheduler_iter
+            else final_output
+        )
 
     def save_pretrained(self, save_directory):
         if os.path.isfile(save_directory):
@@ -859,27 +876,41 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
 
         os.makedirs(save_directory, exist_ok=True)
         weights_name = SAFETENSORS_WEIGHTS_NAME
-        safetensors.torch.save_file(self.state_dict(), os.path.join(save_directory, weights_name), metadata={"format": "pt"})
+        safetensors.torch.save_file(
+            self.state_dict(),
+            os.path.join(save_directory, weights_name),
+            metadata={"format": "pt"},
+        )
+
     # 跑test_bev_diffuser的时候就用这个，按照文件夹范式加载ckpt，训练时方便用下面的。
     def from_pretrained(self, pretrained_model_name_or_path, subfolder=None):
         weights_name = SAFETENSORS_WEIGHTS_NAME
         if os.path.isfile(pretrained_model_name_or_path):
             checkpoint_file = pretrained_model_name_or_path
         elif os.path.isdir(pretrained_model_name_or_path):
-            if os.path.isfile(os.path.join(pretrained_model_name_or_path, weights_name)):
-                checkpoint_file = os.path.join(pretrained_model_name_or_path, weights_name)
+            if os.path.isfile(
+                os.path.join(pretrained_model_name_or_path, weights_name)
+            ):
+                checkpoint_file = os.path.join(
+                    pretrained_model_name_or_path, weights_name
+                )
             elif subfolder is not None and os.path.isfile(
-            os.path.join(pretrained_model_name_or_path, subfolder, weights_name)):
-                checkpoint_file = os.path.join(pretrained_model_name_or_path, subfolder, weights_name)
+                os.path.join(pretrained_model_name_or_path, subfolder, weights_name)
+            ):
+                checkpoint_file = os.path.join(
+                    pretrained_model_name_or_path, subfolder, weights_name
+                )
         else:
-            print(f"Error no file named {weights_name} found in directory {pretrained_model_name_or_path}.")
+            print(
+                f"Error no file named {weights_name} found in directory {pretrained_model_name_or_path}."
+            )
             return
         state_dict = safetensors.torch.load_file(checkpoint_file, device="cpu")
         try:
             self.load_state_dict(state_dict, strict=True)
-            print('successfully load the entire model')
+            print("successfully load the entire model")
         except:
-            print('not successfully load the entire model, try to load part of model')
+            print("not successfully load the entire model, try to load part of model")
             self.load_state_dict(state_dict, strict=False)
 
     # ============= Table 8 计时：辅助方法 =============
@@ -891,18 +922,19 @@ class ADMMDenoiser(nn.Module): #总共有三种图：精细图，稀疏图和残
     def get_avg_timing(self):
         if self.timing_count == 0:
             return 0.0, 0.0
-        return (self.z_update_time_ms / self.timing_count,
-                self.total_forward_time_ms / self.timing_count)
+        return (
+            self.z_update_time_ms / self.timing_count,
+            self.total_forward_time_ms / self.timing_count,
+        )
+
     # =====================================================
-
-
-
 
 
 class SiLU(nn.Module):  # export-friendly version of SiLU()
     @staticmethod
     def forward(x):
         return x * torch.sigmoid(x)
+
 
 class TimestepBlock(nn.Module):
     """
@@ -934,15 +966,15 @@ class ResBlock(TimestepBlock):
     """
 
     def __init__(
-            self,
-            channels,
-            emb_channels,
-            dropout,
-            out_channels=None,
-            use_conv=False,
-            use_scale_shift_norm=False,
-            dims=2,
-            use_checkpoint=False,
+        self,
+        channels,
+        emb_channels,
+        dropout,
+        out_channels=None,
+        use_conv=False,
+        use_scale_shift_norm=False,
+        dims=2,
+        use_checkpoint=False,
     ):
         super().__init__()
         self.channels = channels
@@ -975,8 +1007,6 @@ class ResBlock(TimestepBlock):
             ),
         )
 
-
-
     def forward(self, x, emb):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
@@ -985,7 +1015,6 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-
 
         h = self.in_layers(x)
         emb_out = self.emb_layers(emb).type(h.dtype)
@@ -1002,8 +1031,6 @@ class ResBlock(TimestepBlock):
         return out
 
 
-
-
 class ObjectAwareCrossAttention(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
@@ -1013,26 +1040,28 @@ class ObjectAwareCrossAttention(nn.Module):
     """
 
     def __init__(
-            self,
-            channels, #256
-            num_heads=1, #8
-            num_head_channels=-1, #32
-            use_checkpoint=False, #F
-            encoder_channels=None, #256
-            return_attention_embeddings=False, #F
-            ds=None, #1
-            resolution=None, #50
-            type=None, #'input'
-            use_positional_embedding=True, #T
-            use_key_padding_mask=False, #F
-            channels_scale_for_positional_embedding=1.0, #1
-            norm_first=False, #F
+        self,
+        channels,  # 256
+        num_heads=1,  # 8
+        num_head_channels=-1,  # 32
+        use_checkpoint=False,  # F
+        encoder_channels=None,  # 256
+        return_attention_embeddings=False,  # F
+        ds=None,  # 1
+        resolution=None,  # 50
+        type=None,  #'input'
+        use_positional_embedding=True,  # T
+        use_key_padding_mask=False,  # F
+        channels_scale_for_positional_embedding=1.0,  # 1
+        norm_first=False,  # F
     ):
         super().__init__()
-        self.norm_for_obj_embedding=None
+        self.norm_for_obj_embedding = None
         self.norm_first = norm_first
-        self.channels_scale_for_positional_embedding = channels_scale_for_positional_embedding
-        self.use_key_padding_mask=use_key_padding_mask
+        self.channels_scale_for_positional_embedding = (
+            channels_scale_for_positional_embedding
+        )
+        self.use_key_padding_mask = use_key_padding_mask
         self.type = type
         self.ds = ds
         self.resolution = resolution
@@ -1043,7 +1072,7 @@ class ObjectAwareCrossAttention(nn.Module):
             self.num_heads = num_heads
         else:
             assert (
-                    channels % num_head_channels == 0
+                channels % num_head_channels == 0
             ), f"q,k,v channels {channels} is not divisible by num_head_channels {num_head_channels}"
             self.num_heads = channels // num_head_channels
 
@@ -1055,87 +1084,159 @@ class ObjectAwareCrossAttention(nn.Module):
         self.qkv_projector = conv_nd(1, channels, 3 * channels, 1)
         self.norm_for_qkv = normalization(channels)
 
-        if encoder_channels is not None: #256
-            self.encoder_channels= encoder_channels
-            self.layout_content_embedding_projector = conv_nd(1, encoder_channels, channels * 2, 1)
-            self.layout_position_embedding_projector = conv_nd(1, encoder_channels, int(channels), 1)
+        if encoder_channels is not None:  # 256
+            self.encoder_channels = encoder_channels
+            self.layout_content_embedding_projector = conv_nd(
+                1, encoder_channels, channels * 2, 1
+            )
+            self.layout_position_embedding_projector = conv_nd(
+                1, encoder_channels, int(channels), 1
+            )
 
             self.norm_for_obj_class_embedding = normalization(encoder_channels)
             self.norm_for_layout_positional_embedding = normalization(int(channels))
-            self.norm_for_image_patch_positional_embedding = normalization(int(channels))
+            self.norm_for_image_patch_positional_embedding = normalization(
+                int(channels)
+            )
 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
     def forward(self, x, layout):
-        '''
+        """
         :param x: (N, C, H, W)
         :param cond_kwargs['xf_out']: (N, C, L2)
         :return:
             extra_output: N x L2 x 3 x ds x ds
-        '''
+        """
 
         cond_kwargs = layout
-
 
         b, c, *spatial = x.shape
         x = x.reshape(b, c, -1)  # N x C x (HxW)
 
         qkv = self.qkv_projector(self.norm_for_qkv(x))  # N x 3C x L1, 其中L1=H*W
-        bs, C, L1, L2 = qkv.shape[0], self.channels, qkv.shape[2], cond_kwargs['obj_bbox_embedding'].shape[-1]
+        bs, C, L1, L2 = (
+            qkv.shape[0],
+            self.channels,
+            qkv.shape[2],
+            cond_kwargs["obj_bbox_embedding"].shape[-1],
+        )
 
         # positional embedding for image patch
 
         image_patch_positional_embedding = self.layout_position_embedding_projector(
-            cond_kwargs['image_patch_bbox_embedding_for_resolution{}'.format(self.resolution)]
+            cond_kwargs[
+                "image_patch_bbox_embedding_for_resolution{}".format(self.resolution)
+            ]
         )  # N x C * channels_scale_for_positional_embedding x L1, 其中L1=H*W
-        image_patch_positional_embedding = self.norm_for_image_patch_positional_embedding(image_patch_positional_embedding)  # (N, C * channels_scale_for_positional_embedding, L1)
-        image_patch_positional_embedding = image_patch_positional_embedding.reshape(bs * self.num_heads, int(C * self.channels_scale_for_positional_embedding) // self.num_heads, L1)  # (N * num_heads, C * channels_scale_for_positional_embedding // num_heads, L1)
+        image_patch_positional_embedding = (
+            self.norm_for_image_patch_positional_embedding(
+                image_patch_positional_embedding
+            )
+        )  # (N, C * channels_scale_for_positional_embedding, L1)
+        image_patch_positional_embedding = image_patch_positional_embedding.reshape(
+            bs * self.num_heads,
+            int(C * self.channels_scale_for_positional_embedding) // self.num_heads,
+            L1,
+        )  # (N * num_heads, C * channels_scale_for_positional_embedding // num_heads, L1)
 
         # content embedding for image patch
-        q_image_patch_content_embedding, k_image_patch_content_embedding, v_image_patch_content_embedding = qkv.split(C, dim=1)  # 3 x (N , C, L1)
-        q_image_patch_content_embedding = q_image_patch_content_embedding.reshape(bs * self.num_heads, C // self.num_heads, L1)  # (N // num_heads, C // num_heads, L1)
-        k_image_patch_content_embedding = k_image_patch_content_embedding.reshape(bs * self.num_heads, C // self.num_heads, L1)  # (N // num_heads, C // num_heads, L1)
-        v_image_patch_content_embedding = v_image_patch_content_embedding.reshape(bs * self.num_heads, C // self.num_heads, L1)  # (N // num_heads, C // num_heads, L1)
+        (
+            q_image_patch_content_embedding,
+            k_image_patch_content_embedding,
+            v_image_patch_content_embedding,
+        ) = qkv.split(
+            C, dim=1
+        )  # 3 x (N , C, L1)
+        q_image_patch_content_embedding = q_image_patch_content_embedding.reshape(
+            bs * self.num_heads, C // self.num_heads, L1
+        )  # (N // num_heads, C // num_heads, L1)
+        k_image_patch_content_embedding = k_image_patch_content_embedding.reshape(
+            bs * self.num_heads, C // self.num_heads, L1
+        )  # (N // num_heads, C // num_heads, L1)
+        v_image_patch_content_embedding = v_image_patch_content_embedding.reshape(
+            bs * self.num_heads, C // self.num_heads, L1
+        )  # (N // num_heads, C // num_heads, L1)
 
         # embedding for image patch
-        q_image_patch = torch.cat([q_image_patch_content_embedding, image_patch_positional_embedding], dim=1)  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1)
-        k_image_patch = torch.cat([k_image_patch_content_embedding, image_patch_positional_embedding], dim=1)  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1)
-        v_image_patch = v_image_patch_content_embedding  # (N // num_heads, C // num_heads, L1)
+        q_image_patch = torch.cat(
+            [q_image_patch_content_embedding, image_patch_positional_embedding], dim=1
+        )  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1)
+        k_image_patch = torch.cat(
+            [k_image_patch_content_embedding, image_patch_positional_embedding], dim=1
+        )  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1)
+        v_image_patch = (
+            v_image_patch_content_embedding  # (N // num_heads, C // num_heads, L1)
+        )
 
         # positional embedding for layout
 
-        layout_positional_embedding = self.layout_position_embedding_projector(cond_kwargs['obj_bbox_embedding'])  # N x C*channels_scale_for_positional_embedding x L2
-        layout_positional_embedding = self.norm_for_layout_positional_embedding(layout_positional_embedding)  # (N, C * channels_scale_for_positional_embedding, L2)
-        layout_positional_embedding = layout_positional_embedding.reshape(bs * self.num_heads, int(C * self.channels_scale_for_positional_embedding) // self.num_heads, L2)  # (N // num_heads, channels_scale_for_positional_embedding * C // num_heads, L2)
+        layout_positional_embedding = self.layout_position_embedding_projector(
+            cond_kwargs["obj_bbox_embedding"]
+        )  # N x C*channels_scale_for_positional_embedding x L2
+        layout_positional_embedding = self.norm_for_layout_positional_embedding(
+            layout_positional_embedding
+        )  # (N, C * channels_scale_for_positional_embedding, L2)
+        layout_positional_embedding = layout_positional_embedding.reshape(
+            bs * self.num_heads,
+            int(C * self.channels_scale_for_positional_embedding) // self.num_heads,
+            L2,
+        )  # (N // num_heads, channels_scale_for_positional_embedding * C // num_heads, L2)
 
         # content embedding for layout
 
-        layout_content_embedding = (cond_kwargs['xf_out'] + self.norm_for_obj_class_embedding(cond_kwargs['obj_class_embedding'])) / 2
-        k_layout_content_embedding, v_layout_content_embedding = self.layout_content_embedding_projector(layout_content_embedding).split(C, dim=1)  # 2 x (N x C x L2)
-        k_layout_content_embedding = k_layout_content_embedding.reshape(bs * self.num_heads, C // self.num_heads, L2)  # (N // num_heads, C // num_heads, L2)
-        v_layout_content_embedding = v_layout_content_embedding.reshape(bs * self.num_heads, C // self.num_heads, L2)  # (N // num_heads, C // num_heads, L2)
+        layout_content_embedding = (
+            cond_kwargs["xf_out"]
+            + self.norm_for_obj_class_embedding(cond_kwargs["obj_class_embedding"])
+        ) / 2
+        (
+            k_layout_content_embedding,
+            v_layout_content_embedding,
+        ) = self.layout_content_embedding_projector(layout_content_embedding).split(
+            C, dim=1
+        )  # 2 x (N x C x L2)
+        k_layout_content_embedding = k_layout_content_embedding.reshape(
+            bs * self.num_heads, C // self.num_heads, L2
+        )  # (N // num_heads, C // num_heads, L2)
+        v_layout_content_embedding = v_layout_content_embedding.reshape(
+            bs * self.num_heads, C // self.num_heads, L2
+        )  # (N // num_heads, C // num_heads, L2)
 
         # embedding for layout
-        k_layout = torch.cat([k_layout_content_embedding, layout_positional_embedding], dim=1)  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L2)
+        k_layout = torch.cat(
+            [k_layout_content_embedding, layout_positional_embedding], dim=1
+        )  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L2)
         v_layout = v_layout_content_embedding  # (N // num_heads, C // num_heads, L2)
 
         #  mix embedding for cross attention
-        k_mix = torch.cat([k_image_patch, k_layout], dim=2)  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1+L2)
-        v_mix = torch.cat([v_image_patch, v_layout], dim=2)  # (N // num_heads, 1 * C // num_heads, L1+L2)
+        k_mix = torch.cat(
+            [k_image_patch, k_layout], dim=2
+        )  # (N // num_heads, (1+channels_scale_for_positional_embedding) * C // num_heads, L1+L2)
+        v_mix = torch.cat(
+            [v_image_patch, v_layout], dim=2
+        )  # (N // num_heads, 1 * C // num_heads, L1+L2)
 
-        scale = 1 / math.sqrt(math.sqrt(int((1+self.channels_scale_for_positional_embedding) * C) // self.num_heads))
+        scale = 1 / math.sqrt(
+            math.sqrt(
+                int((1 + self.channels_scale_for_positional_embedding) * C)
+                // self.num_heads
+            )
+        )
         attn_output_weights = torch.einsum(
             "bct,bcs->bts", q_image_patch * scale, k_mix * scale
         )  # More stable with f16 than dividing afterwards, (N x num_heads, L1, L1+L2)
 
         attn_output_weights = attn_output_weights.view(bs, self.num_heads, L1, L1 + L2)
 
-
         attn_output_weights = attn_output_weights.view(bs * self.num_heads, L1, L1 + L2)
 
-        attn_output_weights = torch.softmax(attn_output_weights.float(), dim=-1).type(attn_output_weights.dtype)  # (N x num_heads, L1, L1+L2)
+        attn_output_weights = torch.softmax(attn_output_weights.float(), dim=-1).type(
+            attn_output_weights.dtype
+        )  # (N x num_heads, L1, L1+L2)
 
-        attn_output = torch.einsum("bts,bcs->bct", attn_output_weights, v_mix)  # (N x num_heads, C // num_heads, L1)
+        attn_output = torch.einsum(
+            "bts,bcs->bct", attn_output_weights, v_mix
+        )  # (N x num_heads, C // num_heads, L1)
         attn_output = attn_output.reshape(bs, C, L1)  # (N, C, L1)
 
         #
@@ -1143,37 +1244,59 @@ class ObjectAwareCrossAttention(nn.Module):
 
         output = (x + h).reshape(b, c, *spatial)
 
-
         return output
 
 
 class Out_Layer(nn.Module):
     def __init__(self):
-        super(Out_Layer,self).__init__()
+        super(Out_Layer, self).__init__()
         self.seq = nn.Sequential(
             normalization(256),
             SiLU(),
             zero_module(conv_nd(2, 256, 256, 3, padding=1)),
         )
+
     def forward(self, x):
         return self.seq(x)
-
 
 
 class RStructTransform(nn.Module):
     def __init__(self, in_channels, hidden_channels):
         super().__init__()
 
-        self.res1 = ResBlock(256, 1024, 0, out_channels=256, dims=2, use_checkpoint=False, use_scale_shift_norm=True, )
-        self.res2 = ResBlock(256, 1024, 0, out_channels=256, dims=2, use_checkpoint=False, use_scale_shift_norm=True, )
+        self.res1 = ResBlock(
+            256,
+            1024,
+            0,
+            out_channels=256,
+            dims=2,
+            use_checkpoint=False,
+            use_scale_shift_norm=True,
+        )
+        self.res2 = ResBlock(
+            256,
+            1024,
+            0,
+            out_channels=256,
+            dims=2,
+            use_checkpoint=False,
+            use_scale_shift_norm=True,
+        )
 
-        self.attn = ObjectAwareCrossAttention(256, use_checkpoint=False, num_heads=8, num_head_channels=32,
-                                                    encoder_channels=256,
-                                                    ds=1, resolution=50, type='input', use_positional_embedding=True,
-                                                    use_key_padding_mask=False,
-                                                    channels_scale_for_positional_embedding=1.0, norm_first=False, )
-
-
+        self.attn = ObjectAwareCrossAttention(
+            256,
+            use_checkpoint=False,
+            num_heads=8,
+            num_head_channels=32,
+            encoder_channels=256,
+            ds=1,
+            resolution=50,
+            type="input",
+            use_positional_embedding=True,
+            use_key_padding_mask=False,
+            channels_scale_for_positional_embedding=1.0,
+            norm_first=False,
+        )
 
         self.proj = nn.Conv2d(in_channels, hidden_channels, 1)
 
@@ -1184,20 +1307,46 @@ class RStructTransform(nn.Module):
         x = self.proj(x)
         return x
 
+
 class RStructInverseTransform(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
 
         self.proj = nn.Conv2d(in_channels, out_channels, 1)
 
-        self.attn = ObjectAwareCrossAttention(256, use_checkpoint=False, num_heads=8, num_head_channels=32,
-                                                    encoder_channels=256,
-                                                    ds=1, resolution=50, type='input', use_positional_embedding=True,
-                                                    use_key_padding_mask=False,
-                                                    channels_scale_for_positional_embedding=1.0, norm_first=False, )
+        self.attn = ObjectAwareCrossAttention(
+            256,
+            use_checkpoint=False,
+            num_heads=8,
+            num_head_channels=32,
+            encoder_channels=256,
+            ds=1,
+            resolution=50,
+            type="input",
+            use_positional_embedding=True,
+            use_key_padding_mask=False,
+            channels_scale_for_positional_embedding=1.0,
+            norm_first=False,
+        )
 
-        self.res1 = ResBlock(256, 1024, 0, out_channels=256, dims=2, use_checkpoint=False, use_scale_shift_norm=True, )
-        self.res2 = ResBlock(256, 1024, 0, out_channels=256, dims=2, use_checkpoint=False, use_scale_shift_norm=True, )
+        self.res1 = ResBlock(
+            256,
+            1024,
+            0,
+            out_channels=256,
+            dims=2,
+            use_checkpoint=False,
+            use_scale_shift_norm=True,
+        )
+        self.res2 = ResBlock(
+            256,
+            1024,
+            0,
+            out_channels=256,
+            dims=2,
+            use_checkpoint=False,
+            use_scale_shift_norm=True,
+        )
 
     def forward(self, x, embed, cond):
         x = self.proj(x)
@@ -1205,6 +1354,7 @@ class RStructInverseTransform(nn.Module):
         x = self.attn(x, cond)
         x = self.res1(x, embed)
         return x
+
 
 class Upsample(nn.Module):
     """

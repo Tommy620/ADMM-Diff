@@ -5,7 +5,9 @@ from pathlib import Path
 
 
 ADMM_TEST = Path("/root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser/test.sh")
-BASELINE_TEST = Path("/root/autodl-tmp/BEVDiffuser-main/BEVFormer/projects/bevdiffuser/test.sh")
+BASELINE_TEST = Path(
+    "/root/autodl-tmp/BEVDiffuser-main/BEVFormer/projects/bevdiffuser/test.sh"
+)
 
 
 def main():

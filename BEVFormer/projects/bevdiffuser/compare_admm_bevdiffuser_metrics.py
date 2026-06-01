@@ -75,7 +75,9 @@ def discover_admm(root, checkpoint, protocol):
     rows = {}
     for path in sorted(train_root.glob(pattern)):
         run_name = path.parts[-6]
-        exp = experiment_name(run_name, ("admmdiff_stg1_tiny_mini_", "admmdiff_stg1_tiny_mini"))
+        exp = experiment_name(
+            run_name, ("admmdiff_stg1_tiny_mini_", "admmdiff_stg1_tiny_mini")
+        )
         rows[exp] = read_metrics(path)
     return rows
 
@@ -86,7 +88,9 @@ def discover_baseline(root, checkpoint, protocol):
     rows = {}
     for path in sorted(train_root.glob(pattern)):
         run_name = path.parts[-6]
-        exp = experiment_name(run_name, ("BEVDiffuser_stg1_tiny_mini_", "BEVDiffuser_stg1_tiny_mini"))
+        exp = experiment_name(
+            run_name, ("BEVDiffuser_stg1_tiny_mini_", "BEVDiffuser_stg1_tiny_mini")
+        )
         rows[exp] = read_metrics(path)
     return rows
 
@@ -94,7 +98,9 @@ def discover_baseline(root, checkpoint, protocol):
 def read_shell_var(script_path, name):
     if not script_path.exists():
         return None
-    pattern = re.compile(rf"^\s*{re.escape(name)}=(?P<quote>['\"]?)(?P<value>.*?)(?P=quote)\s*$")
+    pattern = re.compile(
+        rf"^\s*{re.escape(name)}=(?P<quote>['\"]?)(?P<value>.*?)(?P=quote)\s*$"
+    )
     for line in script_path.read_text(encoding="utf-8", errors="ignore").splitlines():
         if line.strip().startswith("#"):
             continue
@@ -111,8 +117,12 @@ def protocol_warnings(admm_root, baseline_root):
     baseline_bev = read_shell_var(baseline_test, "BEV_CHECKPOINT")
     warnings = []
     if admm_bev and baseline_bev:
-        admm_uses_trained_bev = "checkpoint-" in admm_bev and admm_bev.endswith("bev_model.pth")
-        baseline_uses_trained_bev = "checkpoint-" in baseline_bev and baseline_bev.endswith("bev_model.pth")
+        admm_uses_trained_bev = "checkpoint-" in admm_bev and admm_bev.endswith(
+            "bev_model.pth"
+        )
+        baseline_uses_trained_bev = (
+            "checkpoint-" in baseline_bev and baseline_bev.endswith("bev_model.pth")
+        )
         if admm_uses_trained_bev != baseline_uses_trained_bev:
             warnings.append(
                 "BEV checkpoint policy differs: ADMM uses "
@@ -186,8 +196,16 @@ def print_csv(admm_rows, baseline_rows):
         row = [exp]
         row.extend(fmt(admm.get(key)) for key in METRIC_KEYS)
         row.extend(fmt(base.get(key)) for key in METRIC_KEYS)
-        delta_map = admm.get("mean_ap") - base.get("mean_ap") if admm.get("mean_ap") is not None and base.get("mean_ap") is not None else None
-        delta_nds = admm.get("nd_score") - base.get("nd_score") if admm.get("nd_score") is not None and base.get("nd_score") is not None else None
+        delta_map = (
+            admm.get("mean_ap") - base.get("mean_ap")
+            if admm.get("mean_ap") is not None and base.get("mean_ap") is not None
+            else None
+        )
+        delta_nds = (
+            admm.get("nd_score") - base.get("nd_score")
+            if admm.get("nd_score") is not None and base.get("nd_score") is not None
+            else None
+        )
         row.extend((fmt(delta_map), fmt(delta_nds)))
         print(",".join(row))
 
@@ -195,7 +213,9 @@ def print_csv(admm_rows, baseline_rows):
 def main():
     args = parse_args()
     admm_rows = discover_admm(args.admm_root, args.checkpoint, args.protocol)
-    baseline_rows = discover_baseline(args.baseline_root, args.checkpoint, args.protocol)
+    baseline_rows = discover_baseline(
+        args.baseline_root, args.checkpoint, args.protocol
+    )
 
     warnings = protocol_warnings(args.admm_root, args.baseline_root)
     for warning in warnings:

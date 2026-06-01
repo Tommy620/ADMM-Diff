@@ -28,5 +28,5 @@
 #
 import torch
 
-a = torch.eye(3, device='cuda')
+a = torch.eye(3, device="cuda")
 print(torch.linalg.inv(a))
