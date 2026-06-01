@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.batchnorm import _BatchNorm
-
+import warnings
 
 VoVNet19_slim_dw_eSE = {
     "stem": [64, 64, 64],
