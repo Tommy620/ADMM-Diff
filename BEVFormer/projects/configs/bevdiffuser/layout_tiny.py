@@ -5,7 +5,7 @@
 # less encoder layers: 6 -> 3
 # smaller input size: 1600*900 -> 800*450
 # multi-scale feautres -> single scale features (C5)
-
+import os
 
 _base_ = [
     '../datasets/custom_nus-3d.py',
@@ -216,9 +216,8 @@ model = dict(
             pc_range=point_cloud_range))))
 
 dataset_type = 'CustomNuScenesDiffusionDataset_layout'
-data_root = '/root/autodl-tmp/nuscenes/'
-info_root = "/root/autodl-tmp/nuscenes/pkl_4_bevdiffuser/" #pkl_4_bevdiffuser_mini/
-
+data_root = os.environ.get('NUSCENES_DATAROOT', '/root/autodl-tmp/nuscenes/')
+info_root = os.environ.get('NUSCENES_INFO_ROOT', '/root/autodl-tmp/nuscenes/pkl_4_bevdiffuser/') #pkl_4_bevdiffuser_mini/
 file_client_args = dict(backend='disk')
 
 

@@ -13,7 +13,7 @@ PORT="${PORT:-29703}"
 
 
 BEV_CONFIG="${SCRIPT_DIR}/../configs/bevdiffuser/layout_tiny.py"
-BEV_CHECKPOINT="/root/autodl-tmp/ckpts/bevformer/bevformer_tiny_epoch_24.pth" #/root/autodl-fs/wz_ckpts/bevformer/bev_diffuser/ckpts/bevformer_r101_dcn_24ep.pth
+BEV_CHECKPOINT="${BEV_CKPT:-/root/autodl-tmp/ckpts/bevformer/bevformer_tiny_epoch_24.pth}"
 PRETRAINED_ADMM_DENOISER_CHECKPOINT=None
 PRETRAINED_MODEL="CompVis/stable-diffusion-v1-4"
 
@@ -39,8 +39,9 @@ NUM_ADMM_ITERS="${NUM_ADMM_ITERS:-4}"
 FREEZE_BEV_HEAD_FOR_TASK_LOSS="${FREEZE_BEV_HEAD_FOR_TASK_LOSS:-0}"
 CFG_OPTIONS="${CFG_OPTIONS:-}"
 
+RESUME_STEP="${RESUME_STEP:-}"   # 续训传步数, 例 RESUME_STEP=5000; 留空=从头训练
 OUTPUT_DIR="${SCRIPT_DIR}/train/${RUN_NAME}"
-# RESUME_FROM_CHECKPOINT=None
+
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -49,7 +50,7 @@ cd "${BEVFORMER_ROOT}"
 echo "GPUS=${GPUS}, PORT=${PORT}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
-echo "RESUME_FROM_CHECKPOINT=${RESUME_FROM_CHECKPOINT}"
+echo "RESUME_STEP=${RESUME_STEP}"
 echo "TASK_LOSS_SCALE=${TASK_LOSS_SCALE}"
 echo "CONDITION_MODE=${CONDITION_MODE}"
 echo "NUM_ADMM_ITERS=${NUM_ADMM_ITERS}"
@@ -64,6 +65,9 @@ if [[ -n "${CFG_OPTIONS}" ]]; then
   # shellcheck disable=SC2206
   CFG_OPTIONS_ARRAY=(${CFG_OPTIONS})
   EXTRA_ARGS+=(--cfg-options "${CFG_OPTIONS_ARRAY[@]}")
+fi
+if [[ -n "${RESUME_STEP}" ]]; then
+  EXTRA_ARGS+=(--resume_from_checkpoint "${OUTPUT_DIR}/checkpoint-${RESUME_STEP}")
 fi
 
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
@@ -91,14 +95,12 @@ python -m torch.distributed.launch --nproc_per_node=2 \
     --prediction_type "${PREDICTION_TYPE}" \
     --task_loss_scale "${TASK_LOSS_SCALE}" \
     --num_admm_iters "${NUM_ADMM_ITERS}" \
-    --resume_from_checkpoint /root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser/train/admmdiff_stg1_tiny/checkpoint-5000 \
     "${EXTRA_ARGS[@]}"
-    # --resume_from_checkpoint /root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser/train/admmdiff_stg1_tiny/checkpoint-35000 \
     # --use_up_down_sample \
-    # --resume_from_checkpoint "${RESUME_FROM_CHECKPOINT}"
+    
 
 
-# 使用方式：cd /tmp/pycharm_project_877/BEVFormer/projects/bevdiffuser
+# 使用方式：
 # bash train.sh 2
 
 # 你现在 train.sh 里全集是：

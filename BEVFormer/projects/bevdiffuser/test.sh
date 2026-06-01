@@ -3,9 +3,13 @@ set -e
 export CUDA_VISIBLE_DEVICES=0,1
 export HF_ENDPOINT=https://hf-mirror.com
 
-BEV_CONFIG="/root/autodl-tmp/ADMM-Diff/BEVFormer/projects/configs/bevdiffuser/layout_tiny.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CHECKPOINT_DIR="/root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser/train/admmdiff_stg1_tiny-resume-35000/checkpoint-50000"
+BEV_CONFIG="${SCRIPT_DIR}/../configs/bevdiffuser/layout_tiny.py"
+
+RUN_NAME="${RUN_NAME:-admmdiff_stg1_tiny}"
+STEP="${STEP:-50000}"
+CHECKPOINT_DIR="${SCRIPT_DIR}/train/${RUN_NAME}/checkpoint-${STEP}"
 
 BEV_CHECKPOINT="${CHECKPOINT_DIR}/bev_model.pth"
 

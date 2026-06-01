@@ -229,9 +229,9 @@ model = dict(
             pc_range=point_cloud_range))))
 
 dataset_type = 'CustomNuScenesDiffusionDataset_layout'
-# data_root = '/fs/scratch/rb_bd_dlp_rng-dl01_cr_AID_employees/archive/activities/aid_005/nuScenes/nuscenes/bevformer_infos/'
-info_root = "/root/autodl-tmp/nuscenes/pkl_4_bevdiffuser/pkl_4_bevdiffuser_mini/" # pkl_4_bevdiffuser_mini/
-data_root = '/root/autodl-tmp/nuscenes/'
+import os
+info_root = os.environ.get('NUSCENES_INFO_ROOT', '/root/autodl-tmp/nuscenes/pkl_4_bevdiffuser/pkl_4_bevdiffuser_mini/') # pkl_4_bevdiffuser_mini/
+data_root = os.environ.get('NUSCENES_DATAROOT', '/root/autodl-tmp/nuscenes/')
 file_client_args = dict(backend='disk')
 
 

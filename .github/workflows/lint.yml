@@ -1,0 +1,38 @@
+name: 代码果园自动质检流水线 (Linting)
+
+# 什么时候触发机器人？当你往仓库里推代码 (push) 或者提合并请求 (pull_request) 时
+on: [push, pull_request]
+
+jobs:
+  check-code:
+    runs-on: ubuntu-latest # 给机器人分配一台最新的 Ubuntu 虚拟电脑来干活
+
+    steps:
+    # 第1步：把你的果园（代码）克隆到虚拟电脑上
+    - name: 检出代码
+      uses: actions/checkout@v3
+
+    # 第2步：安装 Python 工具
+    - name: 配置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8' # 可以根据你的实际情况改
+
+    # 第3步：安装我们刚才说的“修剪剪刀”
+    - name: 安装 Black 和 Flake8
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8
+
+    # 第4步：用 Black 检查排版是否整齐
+    - name: 运行 Black 格式检查
+      run: |
+        # --check 表示只检查不修改，如果格式不对机器人就会报警让流水线亮红灯
+        black --check . 
+
+    # 第5步：用 Flake8 检查有没有语法错误和“死树杈”（死代码）
+    - name: 运行 Flake8 语法检查
+      run: |
+        # 忽略一些太吹毛求疵的规则，行宽限制在119字符
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --max-complexity=10 --max-line-length=119 --statistics

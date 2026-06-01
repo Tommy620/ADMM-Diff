@@ -88,12 +88,7 @@ def train():
     )
     logger.info(accelerator.state, main_process_only=False)
 
-    # change output dir first
-    if args.resume_from_checkpoint:
-        # change the output dir manually
-        resume_ckpt_number = args.resume_from_checkpoint.split("-")[-1]
-        args.output_dir = f"{args.output_dir}-resume-{resume_ckpt_number}"
-        logger.info(f"change output dir to {args.output_dir}")
+    
 
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
