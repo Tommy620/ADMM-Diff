@@ -189,6 +189,13 @@ def parse_args():
         default=4,
         help="Number of unrolled ADMM iterations used by ADMMDenoiser.",
     )
+    # 实验性旋钮（默认静默）：测 sparse 权重时须与训练用同一 c。
+    parser.add_argument(
+        "--sparsity_coef",
+        type=float,
+        default=0.0,
+        help="V3 固定相对软阈值系数 c：threshold = c * mean(|Rv|)。默认 0.0=不产生稀疏。",
+    )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
@@ -218,7 +225,9 @@ def test():
     if not args.use_classifier_guidence:
         bev_model.requires_grad_(False)
 
-    admm_denoiser = ADMMDenoiser(num_admm_iters=args.num_admm_iters)
+    admm_denoiser = ADMMDenoiser(
+        num_admm_iters=args.num_admm_iters, sparsity_coef=args.sparsity_coef
+    )
     admm_denoiser.use_up_down_sample = args.use_up_down_sample
     admm_denoiser.from_pretrained(args.checkpoint_dir, subfolder="admm_denoiser")
     device = next(bev_model.parameters()).device
@@ -581,9 +590,11 @@ def evaluate(
             print("[Table 8] === Inference Efficiency Result ===")
             print(f"[Table 8] use_sparse_ops    = {admm_denoiser.use_sparse_ops}")
             print(f'[Table 8] rho value         = {regularization_state["rho"]:.4f}')
-            print(f'[Table 8] gamma value       = {regularization_state["gamma"]:.4f}')
             print(
-                f'[Table 8] threshold value   = {regularization_state["threshold"]:.4f}'
+                f'[Table 8] sparsity_coef     = {regularization_state["sparsity_coef"]:.4f}'
+            )
+            print(
+                f'[Table 8] sparsity          = {regularization_state["sparsity"]:.4f}'
             )
             print(
                 f'[Table 8] num_admm_iters    = {regularization_state["num_admm_iters"]:.0f}'

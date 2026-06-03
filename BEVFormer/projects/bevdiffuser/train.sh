@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 set -e
+source /root/autodl-tmp/ADMM-Diff/env.sh
 export CUDA_VISIBLE_DEVICES=0,1
+export HF_ENDPOINT=https://hf-mirror.com
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BEVFORMER_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -21,10 +23,10 @@ PROJ_NAME="${PROJ_NAME:-admmdiff_stg1_tiny}"
 RUN_NAME="${RUN_NAME:-admmdiff_stg1_tiny}"
 
 # mini集 or 全集训练改这一部分内容：
-MAX_TRAINING_STEPS=50000
+MAX_TRAINING_STEPS="${MAX_TRAINING_STEPS:-50000}"
 TRAIN_BATCH_SIZE=4
 GRADIENT_ACCUMULATION_STEPS=2
-CHECKPOINT_STEP=5000
+CHECKPOINT_STEP="${CHECKPOINT_STEP:-5000}"
 DATALOADER_NUM_WORKERS=8
 LR_SCHEDULER=constant
 LEARNING_RATE=5e-5
@@ -38,6 +40,9 @@ CONDITION_MODE="${CONDITION_MODE:-layout}"
 NUM_ADMM_ITERS="${NUM_ADMM_ITERS:-4}"
 FREEZE_BEV_HEAD_FOR_TASK_LOSS="${FREEZE_BEV_HEAD_FOR_TASK_LOSS:-0}"
 CFG_OPTIONS="${CFG_OPTIONS:-}"
+# 实验性旋钮（默认静默：不设则等同不存在）
+SPARSITY_COEF="${SPARSITY_COEF:-0.0}"
+VERBOSE_ADMM="${VERBOSE_ADMM:-0}"
 
 RESUME_STEP="${RESUME_STEP:-}"   # 续训传步数, 例 RESUME_STEP=5000; 留空=从头训练
 OUTPUT_DIR="${SCRIPT_DIR}/train/${RUN_NAME}"
@@ -56,10 +61,17 @@ echo "CONDITION_MODE=${CONDITION_MODE}"
 echo "NUM_ADMM_ITERS=${NUM_ADMM_ITERS}"
 echo "FREEZE_BEV_HEAD_FOR_TASK_LOSS=${FREEZE_BEV_HEAD_FOR_TASK_LOSS}"
 echo "CFG_OPTIONS=${CFG_OPTIONS}"
+echo "MAX_TRAINING_STEPS=${MAX_TRAINING_STEPS}"
+echo "CHECKPOINT_STEP=${CHECKPOINT_STEP}"
+echo "SPARSITY_COEF=${SPARSITY_COEF}"
+echo "VERBOSE_ADMM=${VERBOSE_ADMM}"
 
 EXTRA_ARGS=()
 if [[ "${FREEZE_BEV_HEAD_FOR_TASK_LOSS}" == "1" ]]; then
   EXTRA_ARGS+=(--freeze_bev_head_for_task_loss)
+fi
+if [[ "${VERBOSE_ADMM}" == "1" ]]; then
+  EXTRA_ARGS+=(--verbose_admm_log)
 fi
 if [[ -n "${CFG_OPTIONS}" ]]; then
   # shellcheck disable=SC2206
@@ -95,6 +107,7 @@ python -m torch.distributed.launch --nproc_per_node=2 \
     --prediction_type "${PREDICTION_TYPE}" \
     --task_loss_scale "${TASK_LOSS_SCALE}" \
     --num_admm_iters "${NUM_ADMM_ITERS}" \
+    --sparsity_coef "${SPARSITY_COEF}" \
     "${EXTRA_ARGS[@]}"
     # --use_up_down_sample \
     
@@ -111,7 +124,7 @@ python -m torch.distributed.launch --nproc_per_node=2 \
 # CHECKPOINT_STEP=5000
 # DATALOADER_NUM_WORKERS=8
 # LR_SCHEDULER=constant
-# LEARNING_RATE=1e-4
+# LEARNING_RATE=5e-5
 
 
 # mini 第一轮建议改成：
@@ -121,5 +134,5 @@ python -m torch.distributed.launch --nproc_per_node=2 \
 # DATALOADER_NUM_WORKERS=4
 # TRAIN_BATCH_SIZE=4
 # GRADIENT_ACCUMULATION_STEPS=2
-# LEARNING_RATE=1e-4
+# LEARNING_RATE=5e-5
 # LR_SCHEDULER=constant

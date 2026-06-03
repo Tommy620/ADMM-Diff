@@ -1,5 +1,9 @@
 set -e
 
+# 用法：
+# cd /root/autodl-tmp/ADMM-Diff/BEVFormer/projects/bevdiffuser
+# STEP=50000 bash test.sh
+source /root/autodl-tmp/ADMM-Diff/env.sh
 export CUDA_VISIBLE_DEVICES=0,1
 export HF_ENDPOINT=https://hf-mirror.com
 

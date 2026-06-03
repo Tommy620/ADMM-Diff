@@ -12,6 +12,7 @@ https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_
 """
 
 import argparse
+import csv
 import logging
 import math
 import os, sys
@@ -69,6 +70,17 @@ from test_bev_diffuser import evaluate
 
 
 logger = get_logger(__name__, log_level="INFO")
+
+
+def _append_csv(path, header, row):
+    """实验用：把一行指标追加到 CSV（文件不存在时先写表头）。"""
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    write_header = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if write_header:
+            w.writerow(header)
+        w.writerow(row)
 
 
 def train():
@@ -153,7 +165,9 @@ def train():
 
         return loss
 
-    admm_denoiser = ADMMDenoiser(num_admm_iters=args.num_admm_iters)
+    admm_denoiser = ADMMDenoiser(
+        num_admm_iters=args.num_admm_iters, sparsity_coef=args.sparsity_coef
+    )
     admm_denoiser.use_up_down_sample = args.use_up_down_sample
     if (
         args.use_up_down_sample
@@ -532,6 +546,45 @@ def train():
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
 
+                # ===== 实验性打印（默认静默，需 --verbose_admm_log 才生效）=====
+                if (
+                    args.verbose_admm_log
+                    and accelerator.is_main_process
+                    and global_step % 50 == 0
+                ):
+                    _tl = (
+                        task_loss.item()
+                        if torch.is_tensor(task_loss)
+                        else float(task_loss)
+                    )
+                    print(
+                        f"[admm] step={global_step} "
+                        f"denoise_loss={denoise_loss.item():.4f} task_loss={_tl:.4f} "
+                        f"sparsity={admm_state['sparsity'] * 100:.1f}% "
+                        f"rho={admm_state['rho']:.4f} "
+                        f"coef={admm_state['sparsity_coef']:.3f}",
+                        flush=True,
+                    )
+                    _append_csv(
+                        os.path.join(args.output_dir, "admm_train_log.csv"),
+                        [
+                            "step",
+                            "coef",
+                            "denoise_loss",
+                            "task_loss",
+                            "sparsity",
+                            "rho",
+                        ],
+                        [
+                            global_step,
+                            admm_state["sparsity_coef"],
+                            round(denoise_loss.item(), 6),
+                            round(_tl, 6),
+                            round(admm_state["sparsity"], 6),
+                            round(admm_state["rho"], 6),
+                        ],
+                    )
+
                 # save checkpoint
                 if global_step % args.checkpointing_steps == 0:
                     save_path = os.path.join(
@@ -596,6 +649,30 @@ def train():
                         for metric, score in eval_results.items():
                             metric = f"val/{metric}"
                             wandb.log({metric: score}, step=step_cnt)
+
+                    # ===== 实验性打印 NDS/mAP（默认静默，需 --verbose_admm_log）=====
+                    if args.verbose_admm_log and accelerator.is_main_process:
+                        _nds = " ".join(
+                            f"{k}={v:.4f}" for k, v in eval_results.items()
+                        )
+                        print(f"[admm][eval] step={global_step} {_nds}", flush=True)
+                        _metric_keys = list(eval_results.keys())
+                        _eval_header = ["step", "coef"] + _metric_keys
+                        _eval_row = [global_step, args.sparsity_coef] + [
+                            round(float(eval_results[k]), 6) for k in _metric_keys
+                        ]
+                        # 每个 run 自己的 eval 明细
+                        _append_csv(
+                            os.path.join(args.output_dir, "admm_eval_log.csv"),
+                            _eval_header,
+                            _eval_row,
+                        )
+                        # 跨 run 共享汇总表（5 个 coef 在一张表里对比）
+                        _summary_path = os.path.join(
+                            os.path.dirname(os.path.abspath(args.output_dir)),
+                            f"{args.tracker_project_name}_eval_summary.csv",
+                        )
+                        _append_csv(_summary_path, _eval_header, _eval_row)
                     admm_denoiser.train()
 
             logs = {
@@ -865,6 +942,21 @@ def parse_args():
         type=int,
         default=4,
         help="Number of unrolled ADMM iterations in ADMMDenoiser.",
+    )
+    # ===== 实验性旋钮（默认静默：不显式声明则等同不存在）=====
+    parser.add_argument(
+        "--sparsity_coef",
+        type=float,
+        default=0.0,
+        help="V3 固定相对软阈值系数 c：threshold = c * mean(|Rv|)。"
+        "默认 0.0 = 不产生稀疏(恒等)，需显式传入才生效。",
+    )
+    parser.add_argument(
+        "--verbose_admm_log",
+        action="store_true",
+        default=False,
+        help="打印 denoise_loss/task_loss/sparsity/rho 及评测 NDS（无 wandb 时用）。"
+        "默认关闭，需显式声明。",
     )
     parser.add_argument(
         "--freeze_bev_head_for_task_loss",
