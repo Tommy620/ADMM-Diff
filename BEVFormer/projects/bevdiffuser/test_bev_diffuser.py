@@ -372,8 +372,14 @@ def evaluate(
     total_time = 0
     num_batches = len(dataloader)
     start_time = time.time()
-    gamma_vals = admm_denoiser.gamma.detach().flatten().tolist()
-    print("gamma value: " + ", ".join(f"{g:.4f}" for g in gamma_vals))
+    _reg_state = admm_denoiser.get_regularization_state()
+    print(
+        f"rho = {_reg_state.get('rho', 0.0):.4f}, "
+        f"gamma = {_reg_state.get('gamma', 0.0):.4f}, "
+        f"shrink = {_reg_state.get('shrink', 0.0):.4f}, "
+        f"sparsity_coef = {_reg_state.get('sparsity_coef', 0.0):.4f}, "
+        f"sparsity = {_reg_state.get('sparsity', 0.0):.4f}"
+    )
 
     # ============= Table 7：feature quality 累计量 =============
     # 我们采用"逐样本累计 + 最后求平均"的写法，避免在循环中存全部 tensor。
@@ -590,6 +596,8 @@ def evaluate(
             print("[Table 8] === Inference Efficiency Result ===")
             print(f"[Table 8] use_sparse_ops    = {admm_denoiser.use_sparse_ops}")
             print(f'[Table 8] rho value         = {regularization_state["rho"]:.4f}')
+            print(f'[Table 8] gamma value       = {regularization_state.get("gamma", 0.0):.4f}')
+            print(f'[Table 8] shrink value      = {regularization_state.get("shrink", 0.0):.4f}')
             print(
                 f'[Table 8] sparsity_coef     = {regularization_state["sparsity_coef"]:.4f}'
             )

@@ -11,8 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BEV_CONFIG="${SCRIPT_DIR}/../configs/bevdiffuser/layout_tiny.py"
 
-RUN_NAME="${RUN_NAME:-admmdiff_stg1_tiny}"
-STEP="${STEP:-50000}"
+RUN_NAME="${RUN_NAME:-admmdiff_ori_resume_70k}"
+STEP="${STEP:-70000}"
 CHECKPOINT_DIR="${SCRIPT_DIR}/train/${RUN_NAME}/checkpoint-${STEP}"
 
 BEV_CHECKPOINT="${CHECKPOINT_DIR}/bev_model.pth"

@@ -45,6 +45,7 @@ SPARSITY_COEF="${SPARSITY_COEF:-0.0}"
 VERBOSE_ADMM="${VERBOSE_ADMM:-0}"
 
 RESUME_STEP="${RESUME_STEP:-}"   # 续训传步数, 例 RESUME_STEP=5000; 留空=从头训练
+RESUME_FROM_CHECKPOINT="${RESUME_FROM_CHECKPOINT:-}"  # 可传外部绝对路径，优先级高于 RESUME_STEP
 OUTPUT_DIR="${SCRIPT_DIR}/train/${RUN_NAME}"
 
 
@@ -56,6 +57,7 @@ echo "GPUS=${GPUS}, PORT=${PORT}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
 echo "RESUME_STEP=${RESUME_STEP}"
+echo "RESUME_FROM_CHECKPOINT=${RESUME_FROM_CHECKPOINT}"
 echo "TASK_LOSS_SCALE=${TASK_LOSS_SCALE}"
 echo "CONDITION_MODE=${CONDITION_MODE}"
 echo "NUM_ADMM_ITERS=${NUM_ADMM_ITERS}"
@@ -78,7 +80,9 @@ if [[ -n "${CFG_OPTIONS}" ]]; then
   CFG_OPTIONS_ARRAY=(${CFG_OPTIONS})
   EXTRA_ARGS+=(--cfg-options "${CFG_OPTIONS_ARRAY[@]}")
 fi
-if [[ -n "${RESUME_STEP}" ]]; then
+if [[ -n "${RESUME_FROM_CHECKPOINT}" ]]; then
+  EXTRA_ARGS+=(--resume_from_checkpoint "${RESUME_FROM_CHECKPOINT}")
+elif [[ -n "${RESUME_STEP}" ]]; then
   EXTRA_ARGS+=(--resume_from_checkpoint "${OUTPUT_DIR}/checkpoint-${RESUME_STEP}")
 fi
 

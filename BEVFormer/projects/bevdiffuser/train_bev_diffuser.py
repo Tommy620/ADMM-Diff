@@ -72,6 +72,12 @@ from test_bev_diffuser import evaluate
 logger = get_logger(__name__, log_level="INFO")
 
 
+def _to_float(value):
+    if torch.is_tensor(value):
+        return float(value.detach().float().mean().item())
+    return float(value)
+
+
 def _append_csv(path, header, row):
     """实验用：把一行指标追加到 CSV（文件不存在时先写表头）。"""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -544,6 +550,44 @@ def train():
 
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
+                if accelerator.is_main_process:
+                    _append_csv(
+                        os.path.join(args.output_dir, "stg1_train_log.csv"),
+                        [
+                            "global_step",
+                            "raw_step",
+                            "epoch",
+                            "learning_rate",
+                            "denoise_loss",
+                            "task_loss",
+                            "total_loss",
+                            "gathered_loss",
+                            "accumulated_train_loss",
+                            "rho",
+                            "gamma",
+                            "threshold",
+                            "shrink",
+                            "sparsity",
+                            "num_admm_iters",
+                        ],
+                        [
+                            global_step,
+                            step_cnt,
+                            epoch,
+                            lr,
+                            _to_float(denoise_loss),
+                            _to_float(task_loss),
+                            _to_float(total_loss),
+                            _to_float(avg_loss),
+                            train_loss,
+                            _to_float(admm_state.get("rho", 0.0)),
+                            _to_float(admm_state.get("gamma", 0.0)),
+                            _to_float(admm_state.get("threshold", 0.0)),
+                            _to_float(admm_state.get("shrink", 0.0)),
+                            _to_float(admm_state.get("sparsity", 0.0)),
+                            _to_float(admm_state.get("num_admm_iters", 0.0)),
+                        ],
+                    )
                 train_loss = 0.0
 
                 # ===== 实验性打印（默认静默，需 --verbose_admm_log 才生效）=====
@@ -562,6 +606,8 @@ def train():
                         f"denoise_loss={denoise_loss.item():.4f} task_loss={_tl:.4f} "
                         f"sparsity={admm_state['sparsity'] * 100:.1f}% "
                         f"rho={admm_state['rho']:.4f} "
+                        f"gamma={admm_state.get('gamma', 0.0):.4f} "
+                        f"shrink={admm_state.get('shrink', 0.0):.4f} "
                         f"coef={admm_state['sparsity_coef']:.3f}",
                         flush=True,
                     )
@@ -574,6 +620,8 @@ def train():
                             "task_loss",
                             "sparsity",
                             "rho",
+                            "gamma",
+                            "shrink",
                         ],
                         [
                             global_step,
@@ -582,6 +630,8 @@ def train():
                             round(_tl, 6),
                             round(admm_state["sparsity"], 6),
                             round(admm_state["rho"], 6),
+                            round(admm_state.get("gamma", 0.0), 6),
+                            round(admm_state.get("shrink", 0.0), 6),
                         ],
                     )
 
@@ -649,6 +699,14 @@ def train():
                         for metric, score in eval_results.items():
                             metric = f"val/{metric}"
                             wandb.log({metric: score}, step=step_cnt)
+                    if accelerator.is_main_process:
+                        metric_keys = list(eval_results.keys())
+                        _append_csv(
+                            os.path.join(args.output_dir, "stg1_eval_log.csv"),
+                            ["global_step", "raw_step", "epoch"] + metric_keys,
+                            [global_step, step_cnt, epoch]
+                            + [round(float(eval_results[key]), 6) for key in metric_keys],
+                        )
 
                     # ===== 实验性打印 NDS/mAP（默认静默，需 --verbose_admm_log）=====
                     if args.verbose_admm_log and accelerator.is_main_process:
