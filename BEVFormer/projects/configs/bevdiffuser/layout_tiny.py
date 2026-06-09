@@ -249,6 +249,7 @@ info_root = os.environ.get(
 )  # pkl_4_bevdiffuser_mini/
 file_client_args = dict(backend="disk")
 
+del os
 
 train_pipeline = [
     dict(type="LoadMultiViewImageFromFiles", to_float32=True),

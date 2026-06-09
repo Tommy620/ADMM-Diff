@@ -1,0 +1,38 @@
+# docker build 会把"构建上下文"（整个仓库目录）打包发给 docker 引擎。
+# 这里排除大文件 / 产物，避免上下文过大拖慢 build。
+# 注意：本工程采用"运行时挂载代码"，镜像里并不 COPY 代码，
+#       所以这里排除的东西不会影响镜像内容，只影响 build 速度。
+
+# 版本控制 / 缓存
+.git
+.github
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# 模型权重 / 检查点（体积大，运行时挂载）
+*.pth
+*.pt
+*.ckpt
+ckpts/
+**/ckpts/
+
+# 数据集（运行时挂载）
+nuscenes/
+**/nuscenes/
+data/
+*.pkl
+
+# 训练 / 测试产物
+results/
+**/train/
+**/work_dirs/
+wandb/
+*.log
+
+# 文档图片等非构建必需资源
+bevdiffuser.png
+
+# 本地环境脚本（运行时在容器内自行 source）
+# env.sh 仍保留在仓库中，挂载后可在容器内使用

@@ -1,5 +1,14 @@
 # Step-by-step installation instructions
 
+> 推荐优先使用 Docker 一键复现环境（见仓库根目录 README 的"用 Docker 一键复现环境"一节）。
+> 本页是手动安装方式，作为进阶/备选保留。下方版本即 Docker 镜像锁定的同一套版本。
+>
+> 关键提示：
+> - mmdet3d 需从源码编译，锁定 commit `f1107977dfd26155fc1f83779ee6535d2468f449`（即 v0.17.1）。
+> - 编译前设置 `export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6+PTX"`（一次编译多架构，通吃 2080/T4、
+>   3090/A100、4090）；4090(sm_89) 靠 8.6 的 PTX 由驱动 JIT 转译（CUDA 11.1 不直接支持 sm_89）。
+> - 完整纯 Python 依赖清单见仓库根目录 `requirements.txt`。
+
 **a. Create a conda virtual environment and activate it.**
 ```shell
 conda create -n bevdiffuser python=3.8 -y
